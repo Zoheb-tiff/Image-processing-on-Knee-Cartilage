@@ -1,0 +1,95 @@
+clear all, clc
+
+%% Read and Display the Image
+
+K = dicomread('KneeImage2.dcm');
+figure, imagesc(K), colormap(gray),colorbar,title('Knee Image');
+ 
+%% Convert to double to normalize it and display the normalized image.
+
+K = double(K);
+K_norm_N = (K - min(K(:)));
+K_norm_D = (max(K(:))-min(K(:)));
+K_norm = K_norm_N./K_norm_D;                                    
+figure, imagesc(K_norm),colormap(gray),colorbar,title('Normalized Knee Image');
+ 
+%% Crop the image
+
+[m n] = size(K_norm)
+for o = 154:m
+    for p = 1:n
+    K_norm(o,p) = 0;
+    end
+end
+figure, imagesc(K_norm),colormap(gray),colorbar,title(' Cropped Normalized Knee Image');
+ 
+%% Threshold to retain values between two levels
+
+for i = 1:m
+    for j = 1:n
+        if (K_norm(i,j)  > 0.33) | (K_norm(i,j) <0.220)
+           K_norm(i,j) = 0;
+        else
+            K_norm(i,j) =1;
+        end
+    end
+end
+figure, imagesc(K_norm),colormap(gray),colorbar,title('Segnmentation by thresholding');   
+ 
+%% Define structuring element and erode to remove speckles and display the
+%result
+
+SE = strel('square',2)
+K1_eroded = imerode(K_norm,SE)
+figure, imagesc(K1_eroded),colormap(gray),colorbar,title('Eroded Segnmentation');
+ 
+%% Fill the empty region surrounded by logical 1
+
+%K1_fill = imfill(K1_eroded);
+%figure, imagesc(K1_fill),colormap(gray),colorbar,title('Filled Segnmentation');
+ 
+%% Find the area of the cartilage
+
+K1_fill_int = uint16(K1_eroded)
+Sum = sum(K1_fill_int(:))
+Area = (0.25)*Sum
+ 
+%% Find the maximum thickness of cartilage
+
+Window = ones(m,1)
+Array = conv2(K1_fill_int,Window)
+[u v] = size(Array)
+I = (u+1)/2
+Max_Thickness = 0.5*(max(Array(I,:)));
+ 
+%% Do Edge detection by Gaussian Method
+
+[g_sobel,t_sobel] = edge(K1_fill_int,'sobel',[],'both')
+A1 = g_sobel + K_norm
+figure, imagesc(A1),colormap(gray),colorbar,title('Sobel');
+ 
+[g_prewitt,t_prewitt] = edge(K1_fill_int,'prewitt',[],'both')
+A2 = g_prewitt + K_norm
+figure, imagesc(A2),colormap(gray),colorbar,title('Prewitt');
+ 
+[g_roberts,t_roberts] = edge(K1_fill_int,'roberts',[],'both')
+A3 = g_roberts + K_norm
+figure, imagesc(A3),colormap(gray),colorbar,title('Roberts');
+ 
+%% Do edge detection by Laplacian Method
+
+[g_log,t_log] = edge(K1_fill_int,'log',[],2)
+B1 = g_log + K_norm
+figure, imagesc(g_log),colormap(gray),colorbar,title('LOG');
+ 
+%% Do edge detection by Morphological Operations
+
+K2 = uint16(K_norm)
+Edge_Morph1 = K2.*K1_fill_int;
+figure,imagesc(Edge_Morph1),colormap(gray),colorbar,title('Segnmentation on grayscale');
+SE_d = strel('square',2);
+Q = imdilate(Edge_Morph1,SE_d);
+R = imerode(Edge_Morph1,SE_d);
+Edge_Morph2 = Q-R;
+C1 = double(Edge_Morph2) + K_norm
+figure,imagesc(C1),colormap(gray),colorbar,title('Edge by Morphological Operation') ;
